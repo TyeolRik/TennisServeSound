@@ -139,6 +139,7 @@ for (dirpath, dirnames, filenames) in walk("./video_data/serve/good/"):
 
 good_counter = []
 bad_counter = []
+STANDARD = -18.0
 for each in good:
     stft_result = librosa.stft(each.audio_array, n_fft=4096, win_length = 4096, hop_length=1024)
     D = np.abs(stft_result)
@@ -146,7 +147,7 @@ for each in good:
     flatten_arr = np.array(S_dB).flatten()
     counter = 0
     for x in flatten_arr:
-        if(x >= -20.0):
+        if(x >= STANDARD):
             counter = counter + 1
     good_counter.append(counter)
     #librosa.display.specshow(S_dB, sr=44100, hop_length = 1024, y_axis='linear', x_axis='time', cmap = cm.jet)
@@ -161,7 +162,7 @@ for each in bad:
     flatten_arr = np.array(S_dB).flatten()
     counter = 0
     for x in flatten_arr:
-        if(x >= -20.0):
+        if(x >= STANDARD):
             counter = counter + 1
     bad_counter.append(counter)
     #librosa.display.specshow(S_dB, sr=44100, hop_length = 1024, y_axis='linear', x_axis='time', cmap = cm.jet)
@@ -176,8 +177,8 @@ for x in good_counter:
 for x in bad_counter:
     bad_avg = bad_avg + x
 
-print(good_avg / len(good_counter))
-print(bad_avg / len(bad_counter))
+print(good_avg / len(good_counter), good_counter)
+print(bad_avg / len(bad_counter), bad_counter)
 """
 colours=["red", "green", "blue", "orange", "crimson", "yellow"]
 f1 = plt.figure("good")
