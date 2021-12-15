@@ -20,9 +20,16 @@ from typing import List, Dict
 # Draw QQ-Plot
 import scipy.stats as stats
 
+N_FFT = 256*2*2*2*2
+WIN_LENGTH = 256*2*2*2*2
+HOP_LENGTH = 128*2*2*2
+
 GOOD = 200
 BAD = 404
 SERVE_LENGTH_MIN, SERVE_LENGTH_MAX = 18.286, sqrt(18.286*18.286 + 4.1148*4.1148) # unit is m (=meter)
+NET_SERVE_LENGTH_MIN, NET_SERVE_LENGTH_MAX = 11.886, sqrt(11.886*11.886 + 4.1148*4.1148) # unit is m (=meter)
+
+counter = 100
 
 def colourSpliter(size):
     jump = int((0xFF - 0x10) / size)
@@ -34,6 +41,12 @@ def frameToSpeed(frame):
     speed_max = SERVE_LENGTH_MAX * 3600.0 / flight_time_of_ball / 1000.0
     return speed_min, speed_max
 
+def net_frameToSpeed(frame):
+    flight_time_of_ball = float(frame) / 30.0
+    speed_min = NET_SERVE_LENGTH_MIN * 3600.0 / flight_time_of_ball / 1000.0
+    speed_max = NET_SERVE_LENGTH_MAX * 3600.0 / flight_time_of_ball / 1000.0
+    return speed_min, speed_max
+
 class RawData:
     path: str
     
@@ -43,6 +56,8 @@ class RawData:
     speed_min: float
     speed_max: float
 
+    net: bool
+
     audio_array: np.ndarray
     max_index, min_index = None, None
 
@@ -51,6 +66,7 @@ class RawData:
 
     def __init__(self, dirname: str, filename: str) -> None:
         self.path = dirname+filename
+        self.frame = 1
 
         # Parse infomation
         filename = filename.replace(" - ", ",")
@@ -73,7 +89,19 @@ class RawData:
             self.goodOrBad = BAD
         else:
             self.goodOrBad = GOOD
+
+        if "net" not in splited[1]:
+            self.net = False
+        else:
+            self.net = True
+            
         self.serveType = splited[1]
+        
+        if self.net == True:
+            self.speed_min, self.speed_max = net_frameToSpeed(self.frame)
+        else:
+            self.speed_min, self.speed_max = frameToSpeed(self.frame)
+
         #self.frame = int(splited[2])
         #self.speed_min, self.speed_max = frameToSpeed(splited[2])
         # print((speed_max + speed_min) / 2.0)
@@ -89,6 +117,9 @@ class RawData:
         # Extract Timbre
         self.timbre = timbral_models.timbral_extractor(self.audio_array, fs=44100, verbose=False)
 
+    def getAverageSpeed(self) -> float:
+        return ((self.speed_max + self.speed_min) / 2.0)
+
     def getTimbreAsFloatArray(self) -> list():
         return [
             self.timbre["hardness"],
@@ -101,6 +132,9 @@ class RawData:
             self.timbre["reverb"],
             ]
 
+    def myTimbreSelection(self) -> float:
+        return (self.timbre["warmth"] + self.timbre["boominess"])
+
     def printInfo(self):
         print("Path", self.path)
         print("Speed", (self.speed_max + self.speed_min) / 2.0)
@@ -110,13 +144,14 @@ class RawData:
         plt.plot(self.audio_array)
 
     def drawMelSpectrogram(self):
-        stft_result = librosa.stft(self.audio_array, n_fft=4096, win_length = 4096, hop_length=1024)
+        stft_result = librosa.stft(self.audio_array, n_fft=N_FFT, win_length = WIN_LENGTH, hop_length=HOP_LENGTH)
         D = np.abs(stft_result)
         S_dB = librosa.power_to_db(D, ref=np.max)
-        librosa.display.specshow(S_dB, sr=44100, hop_length = 1024, y_axis='linear', x_axis='time', cmap = cm.jet)
+        librosa.display.specshow(S_dB, sr=44100, hop_length = HOP_LENGTH, y_axis='linear', x_axis='time', cmap = cm.jet)
         plt.title(self.path.split('/')[-1].split('.mp4')[0])
-        plt.colorbar(format='%2.0f dB')
-        plt.show()
+        # plt.colorbar(format='%2.0f dB')
+        plt.savefig("./MelSpectrogram/"+ self.path.split('/')[-1].split('.mp4')[0] + ".png")
+        plt.cla()
 
     def drawQQPlot(self):
         stats.probplot(self.audio_array, dist=stats.norm, plot=plt)
@@ -140,8 +175,10 @@ for (dirpath, dirnames, filenames) in walk("./video_data/serve/good/"):
 good_counter = []
 bad_counter = []
 STANDARD = -18.0
+
+
 for each in good:
-    stft_result = librosa.stft(each.audio_array, n_fft=4096, win_length = 4096, hop_length=1024)
+    stft_result = librosa.stft(each.audio_array, n_fft=N_FFT, win_length = WIN_LENGTH, hop_length=HOP_LENGTH)
     D = np.abs(stft_result)
     S_dB = librosa.power_to_db(D, ref=np.max)
     flatten_arr = np.array(S_dB).flatten()
@@ -156,7 +193,7 @@ for each in good:
     #plt.show()
 
 for each in bad:
-    stft_result = librosa.stft(each.audio_array, n_fft=4096, win_length = 4096, hop_length=1024)
+    stft_result = librosa.stft(each.audio_array, n_fft=N_FFT, win_length = WIN_LENGTH, hop_length=HOP_LENGTH)
     D = np.abs(stft_result)
     S_dB = librosa.power_to_db(D, ref=np.max)
     flatten_arr = np.array(S_dB).flatten()
@@ -170,6 +207,16 @@ for each in bad:
     #plt.colorbar(format='%2.0f dB')
     #plt.show()
 
+
+for x in good:
+    #x.drawMelSpectrogram()
+    print(x.frame, ",", x.getAverageSpeed(), ",",x.getTimbreAsFloatArray())
+for x in bad:
+    #x.drawMelSpectrogram()
+    print(x.frame, ",", x.getAverageSpeed(), ",",x.getTimbreAsFloatArray())
+
+
+"""
 good_avg = 0.0
 bad_avg = 0.0
 for x in good_counter:
@@ -179,6 +226,9 @@ for x in bad_counter:
 
 print(good_avg / len(good_counter), good_counter)
 print(bad_avg / len(bad_counter), bad_counter)
+"""
+
+
 """
 colours=["red", "green", "blue", "orange", "crimson", "yellow"]
 f1 = plt.figure("good")
